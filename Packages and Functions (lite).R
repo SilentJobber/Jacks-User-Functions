@@ -1,4 +1,3 @@
-
 #basedir = getwd()
 wd_setup <- function(basedir,save.levels = 2){
   #browser()
@@ -7,7 +6,6 @@ wd_setup <- function(basedir,save.levels = 2){
   wds <- strsplit(dirs,split = "/")
   baselength <- length(unlist(strsplit(basedir,split = "/")))
   endlength <- baselength + save.levels
-  
   
   
   wds <- lapply(wds,function(x)(x[1:endlength]))
@@ -20,16 +18,20 @@ wd_setup <- function(basedir,save.levels = 2){
   return(wdm)
 }
 
+
+
+
 #### Start a Time Series ####
-DefineTS <- function(from = "2016-12-31 01:00",to = "2020-1-2 00:00" ,TimeColumn = "DateTime",date = F){
-  require(dplyr)
-  require(timeDate)
+DefineTS <- function(from = "2016-12-31 01:00",to = "2020-1-2 00:00" ,TimeColumn = "DateTime",date = F, by = "hour", tzone = "UTC"){
+  require(tidyverse)
   #browser()
-  from <- as.POSIXct(from,tz = "UTC")
-  to <- as.POSIXct(to,tz = "UTC")
-  
-  x <- as.data.frame(timeSequence(from,to,by = "hour"))
-  
+  from <- as.POSIXct(from,tz = tzone)
+  to <- as.POSIXct(to,tz = tzone)
+
+    
+  x <- as_tibble(seq(from,to,by = by))
+
+    
   colnames(x) <- TimeColumn
   
   if(date){
@@ -40,35 +42,41 @@ DefineTS <- function(from = "2016-12-31 01:00",to = "2020-1-2 00:00" ,TimeColumn
   return(x)
 } 
 
-`%!in%` <- function(x,y)!('%in%'(x,y))
 
-#df <- ts
+
+#df <- as.data.frame(DefineTS())
 ## DateTime to Date/Hour in existing data.frame #####
-data.frame.DatetimeConversion <- function(df,format,TimeColumnName = "DateTime",Year = T,Month = T, DOW = F) {
-  if(!is.data.frame(df)){stop("Input is not a data.frame")}
+DT_conversion <- function(df,format,TimeColumnName = "DateTime",Year = T,Month = T, DOW = F) {
   #browser()
-  require(dplyr)
+  require(tidyverse)
   require(lubridate)
   
+  #if(!is.data.frame(df)){stop("Input is not a data.frame")}
+  
   paste(sum(as.integer(is.na(df[,TimeColumnName]))),"NA's due to DateTime in df.")
+  
   df <- filter(df,!is.na(TimeColumnName))
-  x <- df
+  time_col <- df %>% pull(!!sym(TimeColumnName))
+  
   ## Convert Datetime column into POSIXct if needed
-  if(is.POSIXct(df[,TimeColumnName])){
-    df <- data.frame(DateTime = df[,TimeColumnName], Date = as.Date(df[,TimeColumnName]),Hour = hour(df[,TimeColumnName])) %>% distinct() %>%
-      mutate(Hour = replace(Hour,Hour == 0, 24)) %>% mutate(Date = replace(Date, Hour == 24, Date[which(Hour == 24)] - 1)) %>% rename({{TimeColumnName}} := DateTime)
-    names(df)[1] <- TimeColumnName
+  if(is.POSIXct(time_col)){
     
-    if(Year){df$Year <- year(df$Date)}
-    if(Month){df$Month <- month(df$Date)}
-    if(DOW){df$DOW <- weekdays(df$Date)}
+    x <- data.frame(DateTime = time_col, Date = as.Date(time_col),Hour = hour(time_col)) %>% distinct() %>%
+      mutate(Hour = replace(Hour,Hour == 0, 24)) %>% mutate(Date = replace(Date, Hour == 24, Date[which(Hour == 24)] - 1)) %>% rename({{TimeColumnName}} := DateTime)
+    names(x)[1] <- TimeColumnName
+    
+    if(Year){x$Year <- year(x$Date)}
+    if(Month){x$Month <- month(x$Date)}
+    if(DOW){x$DOW <- weekdays(x$Date)}
   } else(stop("Convert TimeColumnName to POSIXct before using this function"))
   
-  df <- left_join(df,x)
+  df <- left_join(x,df)
   return(df)
 }
+#df.DT_conversion(df)
 
 
+`%!in%` <- function(x,y)!('%in%'(x,y))
 
 #Copy dir to another folder (Used for scenario traking)
 dir.copy <- function(from, to){
