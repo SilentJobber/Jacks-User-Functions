@@ -1,0 +1,7 @@
+# rm(list = setdiff(ls(),c(lsf.str())))
+# setwd(dirname(rstudioapi::getSourceEditorContext()$path))
+# list.files()
+# library(tidyverse)
+# library(lubridate)
+# load.test <- read_csv("CM_HOURLY_USAGE_BY_RATE_V5.csv")
+# temp.test <- read_csv("CM_HOURLY_USAGE_BY_RATE_V5.csv")
