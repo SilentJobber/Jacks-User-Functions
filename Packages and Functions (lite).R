@@ -130,3 +130,43 @@ file.opened <- function(path) {
   )
 }
 
+
+# NERC Holiday Adj
+NERCHoliday.Adj <- function(x){
+  require(timeDate)
+  x <- x[,c("Date","DOW")]
+  Holidays <- do.call(rbind,lapply(list(
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USNewYearsDay") - 3600*24,"DayBefore_USNewYearsDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USNewYearsDay"),"USNewYearsDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USMemorialDay"),"USMemorialDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USMemorialDay") + 3600*24,"DayAfter_USMemorialDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USIndependenceDay") - 3600*24,"DayBefore_USIndependenceDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USIndependenceDay"),"USIndependenceDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USLaborDay") - 3600*24,"DayBefore_USLaborDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USLaborDay"),"USLaborDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USLaborDay") + 3600*24,"DayAfter_USLaborDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USThanksgivingDay") - 3600*24,"DayBefore_USThanksgivingDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USThanksgivingDay"),"USThanksgivingDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USThanksgivingDay") + 3600*24,"DayAfter_USThanksgivingDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USChristmasDay") - 3600*24,"DayBefore_USChristmasDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USChristmasDay"),"USChristmasDay"),
+    data.frame(holiday(unique(year(x$Date)),Holiday = "USChristmasDay") + 3600*24,"DayAfter_USChristmasDay")),
+    setNames,c("Date","Holiday")))   
+  x <- left_join(x,Holidays)
+  
+  x$DOW[x$Holiday %in% c("DayAfter_USMemorialDay", "DayBefore_USThanksgivingDay")]   <- "Monday" # Holidays Modeled as Monday
+  x$DOW[x$Holiday %in% "DayAfter_USLaborDay"] <- "Thursday" # Holidays Modeled as Thursday
+  x$DOW[x$Holiday %in% "DayBefore_USIndependenceDay"]   <-  "Friday" # Holidays Modeled as Friday
+  x$DOW[x$Holiday %in% c("DayBefore_USNewYearsDay",
+                         "USMemorialDay",
+                         "DayBefore_USLaborDay",
+                         "USLaborDay",
+                         "USThanksgivingDay",
+                         "DayAfter_USThanksgivingDay",
+                         "DayBefore_USChristmasDay",
+                         "DayAfter_USChristmasDay")] <-  "Saturday" #Holidays Modeled as Saturday
+  x$DOW[x$Holiday %in% c("USNewYearsDay", "USIndependenceDay", "USChristmasDay","2DayBefore_USChristmasDay") & x$DOW %in% "Friday"] <-  "Saturday"
+  x$DOW[x$Holiday %in% c("USNewYearsDay",  "USIndependenceDay", "USChristmasDay") & x$DOW != "Friday"] <-    "Sunday"
+  
+  return(x)
+}
