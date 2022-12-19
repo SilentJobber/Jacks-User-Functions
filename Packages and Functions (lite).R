@@ -29,7 +29,7 @@ DefineTS <- function(from = "2016-12-31 01:00",to = "2020-1-2 00:00" ,TimeColumn
   to <- as.POSIXct(to,tz = tzone)
 
     
-  x <- as_tibble(seq(from,to,by = by))
+  x <- as_tibble(seq.POSIXt(from,to,by = by))
 
     
   colnames(x) <- TimeColumn
