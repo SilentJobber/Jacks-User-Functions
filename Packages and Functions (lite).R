@@ -172,7 +172,8 @@ NERCHoliday.Adj <- function(x){
   return(x)
 }
 
-# Scenario Weather Shifts 
+
+# Scenario Building
 scenario.ws <- function(Fyear = 2024, 
                         OriginYear.Range = 2006:2022,
                         ShiftParameters.Days = -3:3){
