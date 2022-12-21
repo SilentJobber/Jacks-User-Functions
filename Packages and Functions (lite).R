@@ -171,3 +171,82 @@ NERCHoliday.Adj <- function(x){
   
   return(x)
 }
+
+# Scenario Weather Shifts 
+scenario.ws <- function(Fyear = 2024, 
+                        OriginYear.Range = 2006:2022,
+                        ShiftParameters.Days = -3:3){
+  require(tidyverse)
+  require(lubridate)
+  #browser()
+  '%!in%' <- function(x,y)!('%in%'(x,y))
+  
+  hist.start <- as.POSIXct(paste(min(OriginYear.Range),"1-1 1:00",sep = "-"),tz = "UTC")
+  hist.end <- as.POSIXct(paste(max(OriginYear.Range) + 1,"1-1 0:00",sep = "-"),tz = "UTC")
+  
+  
+  
+  ## Creating Forecast year DateTime range key
+  Fyear.TS <- DefineTS(from = as.POSIXct(paste(Fyear,"1-1 1:00",sep = "-"),tz = "UTC"),
+                       to   = as.POSIXct(paste(Fyear + 1,"1-1 0:00",sep = "-"),tz = "UTC"))
+  
+  DT.key <-  Fyear.TS %>% 
+    group_by(DateTime) %>% 
+    mutate(Scenario = list(OriginYear.Range)) %>% 
+    unnest()
+  
+  ## Creating Scenario year data Origin.year range key
+  scenariodata.TS <- DefineTS(from = hist.start + days(min(ShiftParameters.Days)),
+                              to   = hist.end + days(max(ShiftParameters.Days)))
+  
+  Data  <- DT_conversion(scenariodata.TS) %>% 
+    rename(Scenario = Year,
+           Origin.DateTime = DateTime) %>% 
+    select(-c(Month))
+  
+  year(Data$Date) <- Fyear #replace year in Date
+  
+  Data <- Data %>% 
+    mutate(DateTime = as.POSIXct(paste(Date,Hour),format = "%Y-%m-%d %H",tz = "UTC"))  %>%
+    mutate(DateTime = replace(DateTime,Origin.DateTime < hist.start | Origin.DateTime > hist.end,NA),
+           Scenario = replace(Scenario,Origin.DateTime < hist.start | Origin.DateTime > hist.end,NA)) %>%
+    select(Origin.DateTime,DateTime,Scenario) %>%
+    full_join(DT.key) %>% 
+    mutate(Shift.Days = 0) 
+  
+  Data <-   Data %>% 
+    mutate(Origin.DateTime = if_else(is.na(Origin.DateTime),DateTime - days(1),Origin.DateTime)) # replace leap day with day before
+  
+  #Data %>%  filter(is.na(Origin.DateTime))
+  
+  shift = function(x, lag) {
+    require(dplyr)
+    switch(sign(lag)/2 + 1.5, lead(x, abs(lag)), lag(x, abs(lag)))
+  }
+  
+  #Examples of how lag/lead works
+  # (-) = lag  1 day lag example (-1): Forecast Date (12-31: December 31st) comes from (1-1: January 1st)
+  # (+) = lead 1 day lead example (1): Forecast Date (12-31: December 31st) comes from (12-30: December 30th)
+  ShiftParameters.Days <- -3:3
+  Data.shift <- list()
+  for(i in ShiftParameters.Days){
+    #i <- -3
+    Data.shift[[paste0("ShiftDays_",i)]] <- Data %>% 
+      mutate(Origin.DateTime = shift(Origin.DateTime,lag = i * 24), Scenario = paste0("Scenario_OY",Scenario),Shift.Days = i) %>%
+      filter(!is.na(DateTime))
+    
+  }
+  Data <- do.call(rbind,Data.shift)
+  
+  Data <- Data %>% filter(is.na(Origin.DateTime))
+  
+  ## Cleaning Leap DateTimes from scenario Results
+  if(FYear %!in% seq(from = 1988, to = 2100,by = 4)){
+    leap_dates <- expand.grid(c("1988-2-29","1992-2-29","1996-2-29","2000-2-29","2004-2-29","2008-2-29","2012-2-29","2016-2-29","2020-2-29","2024-2-29",
+                                "2028-2-29","2032-2-29","2036-2-29","2040-2-29","2044-2-29","2048-2-29","2052-2-29","2056-2-29","2060-2-29","2064-2-29"),1:24) %>% 
+      mutate(Leap_DateTimes = paste(Var1,Var2)) %>% mutate(Leap_DateTimes = as.POSIXct(Leap_DateTimes,format = "%Y-%m-%d %H",tz = "UTC"))
+    Data <- filter(Data,DateTime %!in% leap_dates$Leap_DateTimes)
+  }
+  
+  return(Data)
+}
