@@ -179,7 +179,7 @@ scenario.ws <- function(Fyear = 2024,
                         ShiftParameters.Days = -3:3){
   require(tidyverse)
   require(lubridate)
-  #browser()
+  #
   '%!in%' <- function(x,y)!('%in%'(x,y))
   
   hist.start <- as.POSIXct(paste(min(OriginYear.Range),"1-1 1:00",sep = "-"),tz = "UTC")
@@ -194,7 +194,7 @@ scenario.ws <- function(Fyear = 2024,
   DT.key <-  Fyear.TS %>% 
     group_by(DateTime) %>% 
     mutate(Scenario = list(OriginYear.Range)) %>% 
-    unnest()
+    unnest(cols = c(Scenario))
   
   ## Creating Scenario year data Origin.year range key
   scenariodata.TS <- DefineTS(from = hist.start + days(min(ShiftParameters.Days)),
@@ -238,16 +238,20 @@ scenario.ws <- function(Fyear = 2024,
     
   }
   Data <- do.call(rbind,Data.shift)
+  #browser()
   
-  Data <- Data %>% filter(is.na(Origin.DateTime))
-  
+  Data <-   Data %>% 
+    mutate(Origin.DateTime = if_else(is.na(Origin.DateTime),DateTime - days(1),Origin.DateTime)) # Hopefully is replacing only feb29th with feb 28th
+ #Data <- Data %>% filter(is.na(Origin.DateTime))
+ 
   ## Cleaning Leap DateTimes from scenario Results
-  if(FYear %!in% seq(from = 1988, to = 2100,by = 4)){
+  if(Fyear %!in% seq(from = 1988, to = 2100,by = 4)){
     leap_dates <- expand.grid(c("1988-2-29","1992-2-29","1996-2-29","2000-2-29","2004-2-29","2008-2-29","2012-2-29","2016-2-29","2020-2-29","2024-2-29",
                                 "2028-2-29","2032-2-29","2036-2-29","2040-2-29","2044-2-29","2048-2-29","2052-2-29","2056-2-29","2060-2-29","2064-2-29"),1:24) %>% 
       mutate(Leap_DateTimes = paste(Var1,Var2)) %>% mutate(Leap_DateTimes = as.POSIXct(Leap_DateTimes,format = "%Y-%m-%d %H",tz = "UTC"))
     Data <- filter(Data,DateTime %!in% leap_dates$Leap_DateTimes)
   }
-  
+  Data <- Data %>% arrange(Shift.Days,Scenario,DateTime)
   return(Data)
 }
+#ws_Forecast <- scenario.ws(2024,2006:2021,-3:3)
