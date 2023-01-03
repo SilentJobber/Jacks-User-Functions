@@ -179,7 +179,7 @@ scenario.ws <- function(Fyear = 2024,
                         ShiftParameters.Days = -3:3){
   require(tidyverse)
   require(lubridate)
-  #
+ 
   '%!in%' <- function(x,y)!('%in%'(x,y))
   
   hist.start <- as.POSIXct(paste(min(OriginYear.Range),"1-1 1:00",sep = "-"),tz = "UTC")
@@ -197,14 +197,15 @@ scenario.ws <- function(Fyear = 2024,
     unnest(cols = c(Scenario))
   
   ## Creating Scenario year data Origin.year range key
-  scenariodata.TS <- DefineTS(from = hist.start + days(min(ShiftParameters.Days)),
-                              to   = hist.end + days(max(ShiftParameters.Days)))
+  scenariodata.TS <- DefineTS(from = hist.start,
+                              to   = hist.end)
   
   Data  <- DT_conversion(scenariodata.TS) %>% 
     rename(Scenario = Year,
            Origin.DateTime = DateTime) %>% 
     select(-c(Month))
   
+ 
   year(Data$Date) <- Fyear #replace year in Date
   
   Data <- Data %>% 
@@ -213,36 +214,74 @@ scenario.ws <- function(Fyear = 2024,
            Scenario = replace(Scenario,Origin.DateTime < hist.start | Origin.DateTime > hist.end,NA)) %>%
     select(Origin.DateTime,DateTime,Scenario) %>%
     full_join(DT.key) %>% 
-    mutate(Shift.Days = 0) 
+    mutate(Shift.Days = 0) #%>%
   
-  Data <-   Data %>% 
-    mutate(Origin.DateTime = if_else(is.na(Origin.DateTime),DateTime - days(1),Origin.DateTime)) # replace leap day with day before
+  nonleap.correction <- Data %>% 
+    filter(is.na(Origin.DateTime)) %>%
+    mutate(DT_conversion(.)) %>%
+    mutate(Date = Date - days(1))
   
-  #Data %>%  filter(is.na(Origin.DateTime))
+  year(nonleap.correction$Date) <- nonleap.correction$Scenario  
+  
+  nonleap.correction <- nonleap.correction %>%
+    mutate(Origin.DateTime = as.POSIXct(paste(Date,Hour),format = "%Y-%m-%d %H",tz = "UTC")) %>%
+    select(Origin.DateTime,DateTime,Scenario,Shift.Days)
+ 
+  test <- Data[is.na(Data$Origin.DateTime),]
+  
+  
+  Data <- Data %>%
+    filter(!is.na(Origin.DateTime)) %>%
+    bind_rows(nonleap.correction)
+  
+  ##Rearrange
+  
+  Data <- Data %>% arrange(Scenario,DateTime,Origin.DateTime)
+
+  #browser()
+  test.after <- Data[is.na(Data$Origin.DateTime),]
+  #### (Check for NA's) ####
+  # Expect NA's in DateTime and Scenario (Due to extra data needed for weather shifting)
+  #browser()
+  na_count <- sapply(Data,function(y)sum(length(which(is.na(y)))))
+  na_count <- data.frame(na_count)
+  ####
+  
+  
+  extra.ws.dates <- DefineTS(from = hist.start + days(min(ShiftParameters.Days)),
+                              to   = hist.end + days(max(ShiftParameters.Days))) %>%
+    filter(DateTime %!in% scenariodata.TS$DateTime) %>% 
+    rename(Origin.DateTime = DateTime) %>%
+    mutate(DateTime = NA,Scenario = NA, Shift.Days = 0) %>%
+    select(Origin.DateTime,DateTime,Scenario,Shift.Days) %>%
+    group_by(group = Origin.DateTime > min(scenariodata.TS$DateTime)) %>%
+    group_split()
+  names(extra.ws.dates) <- c("pre_dates","post_dates")
+  extra.ws.dates <- lapply(extra.ws.dates,function(x) x %>% select(-group))
+  
+  Data <- bind_rows(extra.ws.dates$pre_dates, Data ,extra.ws.dates$post_dates)
+  
   
   shift = function(x, lag) {
     require(dplyr)
-    switch(sign(lag)/2 + 1.5, lead(x, abs(lag)), lag(x, abs(lag)))
+    switch(sign(lag)/2 + 1.5, lag(x, abs(lag)), lead(x, abs(lag)))
   }
-  
+  # browser()
   #Examples of how lag/lead works
-  # (-) = lag  1 day lag example (-1): Forecast Date (12-31: December 31st) comes from (1-1: January 1st)
-  # (+) = lead 1 day lead example (1): Forecast Date (12-31: December 31st) comes from (12-30: December 30th)
+  # (-) = lag  1 day lag example (-1): Forecast Date (12-31: December 31st) comes from (12-30: December 30th1-1: January 1st)
+  # (+) = lead 1 day lead example (1): Forecast Date (12-31: December 31st) comes from (1-1: January 1st)
   ShiftParameters.Days <- -3:3
   Data.shift <- list()
   for(i in ShiftParameters.Days){
     #i <- -3
     Data.shift[[paste0("ShiftDays_",i)]] <- Data %>% 
-      mutate(Origin.DateTime = shift(Origin.DateTime,lag = i * 24), Scenario = paste0("Scenario_OY",Scenario),Shift.Days = i) %>%
+      mutate(Origin.DateTime = shift(Origin.DateTime,lag = i * 24), 
+             Scenario = paste0("Scenario_OY",Scenario),Shift.Days = i) %>%
       filter(!is.na(DateTime))
     
   }
   Data <- do.call(rbind,Data.shift)
   #browser()
-  
-  Data <-   Data %>% 
-    mutate(Origin.DateTime = if_else(is.na(Origin.DateTime),DateTime - days(1),Origin.DateTime)) # Hopefully is replacing only feb29th with feb 28th
- #Data <- Data %>% filter(is.na(Origin.DateTime))
  
   ## Cleaning Leap DateTimes from scenario Results
   if(Fyear %!in% seq(from = 1988, to = 2100,by = 4)){
@@ -254,4 +293,21 @@ scenario.ws <- function(Fyear = 2024,
   Data <- Data %>% arrange(Shift.Days,Scenario,DateTime)
   return(Data)
 }
+
+### Testing function
 #ws_Forecast <- scenario.ws(2024,2006:2021,-3:3)
+# test_1 <- ws_Forecast %>% 
+#   mutate(DT_conversion(.)) %>%
+#   filter(Date == ymd("2024-2-29")) %>%
+#   filter(is.na(Origin.DateTime))
+# 
+# na_count <- sapply(ws_Forecast,function(y)sum(length(which(is.na(y)))))
+# na_count <- data.frame(na_count)
+# 
+# test_2 <- ws_Forecast %>%
+#   filter(is.na(Origin.DateTime))
+# 
+# test_3 <- ws_Forecast %>% 
+#   group_by(DateTime,Scenario,Shift.Days) %>% 
+#   distinct()
+
